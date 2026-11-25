@@ -8,9 +8,31 @@
   </head>
   <body>
     <header>
+      <button id="admin-menu-button" class="admin-menu-button" type="button" aria-label="Open admin login">
+        &#128100;
+      </button>
       <h1>Mergington High School</h1>
       <h2>Extracurricular Activities</h2>
     </header>
+
+    <div id="admin-modal" class="admin-modal hidden" role="dialog" aria-modal="true" aria-labelledby="admin-modal-title">
+      <div class="admin-modal-content">
+        <button id="admin-modal-close" class="admin-modal-close" type="button" aria-label="Close login window">&times;</button>
+        <h3 id="admin-modal-title">Teacher Login</h3>
+        <form id="login-form">
+          <div class="form-group">
+            <label for="username">Username:</label>
+            <input type="text" id="username" autocomplete="username" required />
+          </div>
+          <div class="form-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" autocomplete="current-password" required />
+          </div>
+          <button type="submit">Login</button>
+        </form>
+        <div id="login-status" class="hidden"></div>
+      </div>
+    </div>
 
     <main>
       <section id="activities-container">
@@ -21,7 +43,7 @@
         </div>
       </section>
 
-      <section id="signup-container">
+      <section id="signup-container" class="hidden">
         <h3>Sign Up for an Activity</h3>
         <form id="signup-form">
           <div class="form-group">
