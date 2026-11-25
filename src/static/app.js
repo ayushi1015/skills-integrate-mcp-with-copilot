@@ -3,6 +3,86 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  const signupContainer = document.getElementById("signup-container");
+  const adminMenuButton = document.getElementById("admin-menu-button");
+  const adminModal = document.getElementById("admin-modal");
+  const adminModalClose = document.getElementById("admin-modal-close");
+  const loginForm = document.getElementById("login-form");
+  const loginStatus = document.getElementById("login-status");
+  let adminToken = sessionStorage.getItem("adminToken");
+  let adminUsername = sessionStorage.getItem("adminUsername");
+
+  function updateAdminUi() {
+    const isAdmin = Boolean(adminToken);
+    signupContainer.classList.toggle("hidden", !isAdmin);
+    document.querySelectorAll(".delete-btn").forEach((button) => {
+      button.classList.toggle("hidden", !isAdmin);
+    });
+    adminMenuButton.title = isAdmin
+      ? `Logged in as ${adminUsername}. Click to log out.`
+      : "Teacher login";
+  }
+
+  adminMenuButton.addEventListener("click", async () => {
+    if (adminToken) {
+      try {
+        await fetch("/logout", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${adminToken}` },
+        });
+      } catch (error) {
+        console.error("Error logging out:", error);
+      }
+      adminToken = null;
+      adminUsername = null;
+      sessionStorage.removeItem("adminToken");
+      sessionStorage.removeItem("adminUsername");
+      updateAdminUi();
+      return;
+    }
+    adminModal.classList.remove("hidden");
+    document.getElementById("username").focus();
+  });
+
+  adminModalClose.addEventListener("click", () => {
+    adminModal.classList.add("hidden");
+  });
+
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
+
+    try {
+      const response = await fetch("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const result = await response.json();
+
+      if (response.ok) {
+        adminToken = result.token;
+        adminUsername = result.username;
+        sessionStorage.setItem("adminToken", adminToken);
+        sessionStorage.setItem("adminUsername", adminUsername);
+        loginForm.reset();
+        adminModal.classList.add("hidden");
+        loginStatus.classList.add("hidden");
+        updateAdminUi();
+      } else {
+        loginStatus.textContent = result.detail || "Invalid login";
+        loginStatus.className = "error";
+        loginStatus.classList.remove("hidden");
+      }
+    } catch (error) {
+      loginStatus.textContent = "Unable to connect to the login service.";
+      loginStatus.className = "error";
+      loginStatus.classList.remove("hidden");
+      console.error("Error logging in:", error);
+    }
+  });
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -60,6 +140,7 @@ document.addEventListener("DOMContentLoaded", () => {
       document.querySelectorAll(".delete-btn").forEach((button) => {
         button.addEventListener("click", handleUnregister);
       });
+      updateAdminUi();
     } catch (error) {
       activitiesList.innerHTML =
         "<p>Failed to load activities. Please try again later.</p>";
@@ -80,6 +161,7 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/unregister?email=${encodeURIComponent(email)}`,
         {
           method: "DELETE",
+          headers: { Authorization: `Bearer ${adminToken}` },
         }
       );
 
@@ -124,6 +206,7 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/signup?email=${encodeURIComponent(email)}`,
         {
           method: "POST",
+          headers: { Authorization: `Bearer ${adminToken}` },
         }
       );
 

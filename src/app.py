@@ -5,9 +5,13 @@ A super simple FastAPI application that allows students to view and sign up
 for extracurricular activities at Mergington High School.
 """
 
-from fastapi import FastAPI, HTTPException
+import json
+import secrets
+
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 import os
 from pathlib import Path
 
@@ -18,6 +22,49 @@ app = FastAPI(title="Mergington High School API",
 current_dir = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
           "static")), name="static")
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+def load_teachers():
+    teachers_path = Path(__file__).parent / "teachers.json"
+    with teachers_path.open("r", encoding="utf-8") as teachers_file:
+        return json.load(teachers_file)
+
+
+admin_tokens = {}
+
+
+def require_admin(
+    authorization: str = Header(default=None),
+    x_admin_username: str = Header(default=None),
+    x_admin_password: str = Header(default=None),
+    username: str = None,
+    password: str = None,
+):
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+        username = admin_tokens.get(token)
+        if username:
+            return username
+
+    supplied_username = x_admin_username or username
+    supplied_password = x_admin_password or password
+    if supplied_username and supplied_password:
+        for teacher in load_teachers():
+            if (
+                secrets.compare_digest(teacher["username"], supplied_username)
+                and secrets.compare_digest(teacher["password"], supplied_password)
+            ):
+                return teacher["username"]
+
+    raise HTTPException(
+        status_code=401,
+        detail="Admin login required",
+    )
 
 # In-memory activity database
 activities = {
@@ -88,15 +135,71 @@ def get_activities():
     return activities
 
 
+@app.post("/login")
+def login(
+    credentials: LoginRequest = None,
+    username: str = None,
+    password: str = None,
+):
+    """Authenticate a teacher using the configured teacher accounts."""
+    if credentials:
+        username = credentials.username
+        password = credentials.password
+
+    for teacher in load_teachers():
+        if (
+            secrets.compare_digest(teacher["username"], username or "")
+            and secrets.compare_digest(teacher["password"], password or "")
+        ):
+            token = secrets.token_urlsafe(32)
+            admin_tokens[token] = teacher["username"]
+            return {
+                "success": True,
+                "username": teacher["username"],
+                "token": token,
+            }
+
+    raise HTTPException(status_code=401, detail="Invalid username or password")
+
+
+@app.post("/logout")
+def logout(authorization: str = Header(default=None)):
+    if authorization and authorization.startswith("Bearer "):
+        admin_tokens.pop(authorization.removeprefix("Bearer ").strip(), None)
+    return {"success": True}
+
+
 @app.post("/activities/{activity_name}/signup")
-def signup_for_activity(activity_name: str, email: str):
-    """Sign up a student for an activity"""
+def signup_for_activity(
+    activity_name: str,
+    email: str,
+    authorization: str = Header(default=None),
+    x_admin_username: str = Header(default=None),
+    x_admin_password: str = Header(default=None),
+    username: str = None,
+    password: str = None,
+):
+    """Register a student for an activity as an authenticated teacher."""
+    require_admin(
+        authorization,
+        x_admin_username,
+        x_admin_password,
+        username,
+        password,
+    )
+
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
 
     # Get the specific activity
     activity = activities[activity_name]
+
+    if len(activity["participants"]) >= activity["max_participants"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Activity is full",
+        )
 
     # Validate student is not already signed up
     if email in activity["participants"]:
@@ -111,8 +214,24 @@ def signup_for_activity(activity_name: str, email: str):
 
 
 @app.delete("/activities/{activity_name}/unregister")
-def unregister_from_activity(activity_name: str, email: str):
-    """Unregister a student from an activity"""
+def unregister_from_activity(
+    activity_name: str,
+    email: str,
+    authorization: str = Header(default=None),
+    x_admin_username: str = Header(default=None),
+    x_admin_password: str = Header(default=None),
+    username: str = None,
+    password: str = None,
+):
+    """Unregister a student from an activity as an authenticated teacher."""
+    require_admin(
+        authorization,
+        x_admin_username,
+        x_admin_password,
+        username,
+        password,
+    )
+
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
