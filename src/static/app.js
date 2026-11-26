@@ -1,9 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
   const activitiesList = document.getElementById("activities-list");
-  const activitySelect = document.getElementById("activity");
-  const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
-  const signupContainer = document.getElementById("signup-container");
   const adminMenuButton = document.getElementById("admin-menu-button");
   const adminModal = document.getElementById("admin-modal");
   const adminModalClose = document.getElementById("admin-modal-close");
@@ -14,10 +11,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateAdminUi() {
     const isAdmin = Boolean(adminToken);
-    signupContainer.classList.toggle("hidden", !isAdmin);
-    document.querySelectorAll(".delete-btn").forEach((button) => {
+    document.querySelectorAll(".delete-btn, .register-btn").forEach((button) => {
       button.classList.toggle("hidden", !isAdmin);
     });
+    if (!isAdmin) {
+      document.querySelectorAll(".registration-form").forEach((form) => {
+        form.classList.add("hidden");
+      });
+      document.querySelectorAll(".register-btn").forEach((button) => {
+        button.setAttribute("aria-expanded", "false");
+      });
+    }
     adminMenuButton.title = isAdmin
       ? `Logged in as ${adminUsername}. Click to log out.`
       : "Teacher login";
@@ -127,13 +131,38 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         `;
 
-        activitiesList.appendChild(activityCard);
+        const registrationForm = document.createElement("form");
+        registrationForm.id = `registration-form-${activitiesList.children.length}`;
+        registrationForm.className = "registration-form hidden";
+        registrationForm.dataset.activity = name;
+        registrationForm.innerHTML = `
+          <div class="form-group">
+            <label>
+              Student Email:
+              <input type="email" name="email" required placeholder="student@mergington.edu" />
+            </label>
+          </div>
+          <button type="submit">Register Student</button>
+        `;
+        registrationForm.addEventListener("submit", handleSignup);
 
-        // Add option to select dropdown
-        const option = document.createElement("option");
-        option.value = name;
-        option.textContent = name;
-        activitySelect.appendChild(option);
+        const registerButton = document.createElement("button");
+        registerButton.type = "button";
+        registerButton.className = "register-btn hidden";
+        registerButton.textContent = "Register student";
+        registerButton.setAttribute("aria-expanded", "false");
+        registerButton.setAttribute("aria-controls", registrationForm.id);
+        registerButton.addEventListener("click", () => {
+          const isOpening = registrationForm.classList.contains("hidden");
+          registrationForm.classList.toggle("hidden");
+          registerButton.setAttribute("aria-expanded", String(isOpening));
+          if (isOpening) {
+            registrationForm.querySelector("input").focus();
+          }
+        });
+
+        activityCard.append(registerButton, registrationForm);
+        activitiesList.appendChild(activityCard);
       });
 
       // Add event listeners to delete buttons
@@ -150,7 +179,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Handle unregister functionality
   async function handleUnregister(event) {
-    const button = event.target;
+    const button = event.currentTarget;
     const activity = button.getAttribute("data-activity");
     const email = button.getAttribute("data-email");
 
@@ -192,12 +221,12 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Handle form submission
-  signupForm.addEventListener("submit", async (event) => {
+  async function handleSignup(event) {
     event.preventDefault();
 
-    const email = document.getElementById("email").value;
-    const activity = document.getElementById("activity").value;
+    const form = event.currentTarget;
+    const email = form.querySelector('input[name="email"]').value;
+    const activity = form.dataset.activity;
 
     try {
       const response = await fetch(
@@ -215,7 +244,6 @@ document.addEventListener("DOMContentLoaded", () => {
       if (response.ok) {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
-        signupForm.reset();
 
         // Refresh activities list to show updated participants
         fetchActivities();
@@ -236,7 +264,7 @@ document.addEventListener("DOMContentLoaded", () => {
       messageDiv.classList.remove("hidden");
       console.error("Error signing up:", error);
     }
-  });
+  }
 
   // Initialize app
   fetchActivities();
